@@ -1,7 +1,7 @@
 ---
 title: "Data analysis assignment 2"
-author: "[add your name here]"
-date: "[add date here]"
+author: "Amy Wonnacott"
+date: "05.02.2020"
 output: github_document
 ---
 
@@ -24,9 +24,9 @@ We will work with three different tables: household roster from wave 8 (*h_egoal
 ```{r}
 library(tidyverse)
 # You need to complete the paths to these files on your computer.
-Egoalt8 <- read_tsv("...h_egoalt.tab")
-Stable <- read_tsv("...xwavedat.tab")
-Hh8 <- read_tsv("...h_hhresp.tab")
+Egoalt8 <- read_tsv("C:/Users/User/Documents/GitHub/dataan3/UKDA-6614-tab/tab/ukhls_w8/h_egoalt.tab")
+Stable <- read_tsv("C:/Users/User/Documents/GitHub/dataan3/UKDA-6614-tab/tab/ukhls_wx/xwavedat.tab")
+Hh8 <- read_tsv("C:/Users/User/Documents/GitHub/dataan3/UKDA-6614-tab/tab/ukhls_w8/h_hhresp.tab")
 ```
 
 ## Filter household roster data (10 points)
@@ -37,8 +37,8 @@ First we want to select only pairs of individuals who are husbands and wives or 
 
 ```{r}
 Partners8 <- Egoalt8 %>%
-        filter(...) %>%
-        select(...)
+        filter(h_relationship_dv=="1"|Egoalt8$h_relationship_dv=="2") %>%
+        select(pidp, apidp, h_hidp, h_relationship_dv, h_sex, h_asex)
 ```
 
 Each couple now appears in the data twice: 1) with one partner as ego and the other as alter, 2) the other way round. Now we will only focus on heterosexual couples, and keep one observation per couple with women as egos and men as their alters.
@@ -46,9 +46,9 @@ Each couple now appears in the data twice: 1) with one partner as ego and the ot
 ```{r}
 Hetero8 <- Partners8 %>%
         # filter out same-sex couples
-        filter(...) %>%
+        filter(h_sex!=h_asex)%>%
         # keep only one observation per couple with women as egos
-        filter(...)
+        filter(h_sex=="2")
 ```
 
 ## Recode data on ethnicity (10 points)
@@ -57,7 +57,7 @@ In this assignment we will explore ethnic endogamy, i.e. marriages and partnersh
 
 ```{r}
 Stable2 <- Stable %>%
-        select(...)
+        select(pidp, racel_dv)
 ```
 
 Let's code missing values on ethnicity (-9) as NA.
@@ -71,8 +71,11 @@ Now let us recode the variable on ethnicity into a new binary variable with the 
 
 ```{r}
 Stable2 <- Stable2 %>%
-        mutate(race = ...)
+        mutate(race = case_when(
+                between(racel_dv, 1,4)~ "White",
+                racel_dv>=4~ "Non-White"))
 ```
+
 
 ## Join data (30 points)
 
@@ -80,7 +83,7 @@ Now we want to join data from the household roster (*Hetero8*) and the data tabl
 
 ```{r}
 JoinedEthn <- Hetero8 %>%
-        ...
+        inner_join(Stable2, by="pidp")
 ```
 
 Let us rename the variables for ethnicity to clearly indicate that they refer to egos.
@@ -95,7 +98,7 @@ Now let us merge in the data on alter's ethnicity. Note that in this case the ke
 
 ```{r}
 JoinedEthn <- JoinedEthn %>%
-        ...
+        full_join(Stable2, c("apidp"="pidp"), na.rm=TRUE)
 ```
 
 Renaming the variables for alters.
@@ -113,8 +116,8 @@ Let us start by looking at the joint distribution of race (White vs. non-White) 
 ```{r}
 TableRace <- JoinedEthn %>%
         # filter out observations with missing data
-        filter(...) %>%
-        count(...)
+        na.omit(JoinedEthn) %>%
+        count(egoRace, alterRace)
 TableRace
 ```
 
@@ -125,20 +128,48 @@ Of course, you can simply calculate these numbers manually. However, the code wi
 
 ```{r}
 TableRace %>%
-        # group by ego's race to calculate sums
-        group_by(...) %>%
-        # create a new variable with the total number of women by race
-        mutate(...) %>%
-        # create a new variable with the required probabilities 
-        mutate(...)
+        # 
 ```
 
 ## Join with household data and calculate mean and median number of children by ethnic group (30 points)
 
 1) Join the individual-level file with the household-level data from wave 8 (specifically, we want the variable for the number of children in the household).
-2) Select only couples that are ethnically endogamous (i.e. partners come from the same ethnic group) for the following groups: White British, Indian, and Pakistani.
-3) Produce a table showing the mean and median number of children in these households by ethnic group (make sure the table has meaningful labels for ethnic groups, not just numerical codes).
-4) Write a short interpretation of your results. What could affect your findings?
+
 
 ```{r}
-...
+JoinedEthn <- JoinedEthn %>%
+        full_join(Hh8, by= "h_hidp", na.rm=TRUE)%>%
+        select(h_hidp,pidp, egoRacel_dv,alterRacel_dv, h_nkids_dv)
+        
+```
+2) Select only couples that are ethnically endogamous (i.e. partners come from the same ethnic group) for the following groups: White British, Indian, and Pakistani.
+
+```{r}
+JoinedEthn <-JoinedEthn%>%
+        filter(egoRacel_dv==alterRacel_dv)%>%
+        filter(egoRacel_dv== 1| egoRacel_dv==9 | egoRacel_dv==10)%>%
+        na.omit(JoinedEthn)
+```
+```{r}
+JoinedEthn <- JoinedEthn %>%
+        mutate(egoRacel_dv = ifelse(egoRacel_dv==1, "White British",
+                                     ifelse(egoRacel_dv==9, "Indian",
+                                            ifelse(egoRacel_dv==10, "Pakistani", NA)))
+        )
+
+```
+3) Produce a table showing the mean and median number of children in these households by ethnic group (make sure the table has meaningful labels for ethnic groups, not just numerical codes).
+```{r}
+TableRaceKids<- JoinedEthn %>%
+       select(egoRacel_dv, h_nkids_dv)%>%
+        group_by(egoRacel_dv)%>%
+        summarise(
+                meankids = mean(h_nkids_dv),
+                mediankids= median(h_nkids_dv)
+        )
+```
+4) Write a short interpretation of your results. What could affect your findings?
+
+The results of the table show that there are large differences between the average and median number of children in White British, Indian and Pakistani families. 
+The mean number of children in White British families is 0.6, with a median number of 0. This is in stark contrast to Pakistani families, with a mean number of 1.8 and median number of 2. Indian families sit between these figures, with a mean and median number of 1.
+These figures do not take into account the ages of the couples and so this may skew the data and results- there may be more young White British couples who are too young to settle and have a family. 
